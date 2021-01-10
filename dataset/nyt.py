@@ -8,13 +8,14 @@ import numpy as np
 class NYTData(Dataset):
 
     def __init__(self, root_path, train=True):
+        //如果是训练集，则到train文件夹下，否则去test文件夹下
         if train:
             path = os.path.join(root_path, 'train/')
             print('loading train data')
         else:
             path = os.path.join(root_path, 'test/')
             print('loading test data')
-
+        //读取npy文件
         self.labels = np.load(path + 'labels.npy')
         self.x = np.load(path + 'bags_feature.npy')
         self.x = list(zip(self.x, self.labels))
