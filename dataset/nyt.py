@@ -48,6 +48,9 @@ class NYTLoad(object):
         self.test_path = os.path.join(root_path, 'bags_test.txt')
 
         print('loading start....')
+        # self.w2v是所有单词对应的向量数组，[[...],[....]....]
+        # self.word2id是所有单词和下标的字典，{‘单词1’:0，'单词2',1,.....}
+        # self.id2word是所有下标和单词的字典，{‘0’:单词1，'1',单词2,.....}
         self.w2v, self.word2id, self.id2word = self.load_w2v()
         self.p1_2v, self.p2_2v = self.load_p2v()
         
@@ -239,13 +242,12 @@ class NYTLoad(object):
             entitiesPos:前两个label数组且每个值都加1，升序，[[1,35]]
             masks:最后的句子的数组，即位置如[[1,2,2,2,2,2,2,2,2,....]]
             '''
-            
             es, num, sens, ldists, rdists, pos, enPos, masks = bag
             new_sen = []
             new_pos = []
             new_entPos = []
             new_masks= []
-
+            #idx下标，sen第一个句子的数组
             for idx, sen in enumerate(sens):
                 sen, pf1, pf2, pos, mask = self.get_pad_sen_pos(sen, ldists[idx], rdists[idx], enPos[idx], masks[idx])
                 new_sen.append(sen)
@@ -260,12 +262,17 @@ class NYTLoad(object):
         '''
         refer: github.com/SharmisthaJat/RE-DS-Word-Attention-Models
         '''
+        #第一个句子
         x = []
+        #第二个句子
         pf1 = []
+        #第三个句子
         pf2 = []
+        #位置
         masks = []
 
         # shorter than max_len
+        # 第一个句子不变，剩下两个每个数值加1，位置变量不变，全部放到新数组里       
         if len(sen) <= self.max_len:
             for i, ind in enumerate(sen):
                 x.append(ind)
@@ -273,8 +280,11 @@ class NYTLoad(object):
                 pf2.append(rdist[i] + 1)
                 masks.append(mask[i])
         # longer than max_len, expand between two entities
+        
         else:
+            #在pos的两个数中展开，如pos为[1,35],则idx为[1,2,3,....,35]
             idx = [i for i in range(pos[0], pos[1] + 1)]
+            #如果
             if len(idx) > self.max_len:
                 idx = idx[:self.max_len]
                 for i in idx:
