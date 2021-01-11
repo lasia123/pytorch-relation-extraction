@@ -41,7 +41,8 @@ class NYTLoad(object):
         self.root_path = root_path
         self.pos_dim = pos_dim
         self.pad = pad
-
+        
+        # w2v_path 词语对应表里的, bags_train.txt训练集数据，bags_test测试集数据
         self.w2v_path = os.path.join(root_path, 'vector.txt')
         self.train_path = os.path.join(root_path, 'bags_train.txt')
         self.test_path = os.path.join(root_path, 'bags_test.txt')
@@ -49,11 +50,15 @@ class NYTLoad(object):
         print('loading start....')
         self.w2v, self.word2id, self.id2word = self.load_w2v()
         self.p1_2v, self.p2_2v = self.load_p2v()
-
+        
+        # self.w2v是所有单词对应的向量数组，[[...],[....]....]
         np.save(os.path.join(self.root_path, 'w2v.npy'), self.w2v)
+        # self.p1_2v是（limit * 2 + 1）*pos_dim的二维矩阵，里面是-1.0到1.0的随机数
         np.save(os.path.join(self.root_path, 'p1_2v.npy'), self.p1_2v)
+        # self.p2_2v是（limit * 2 + 1）*pos_dim的二维矩阵，里面是-1.0到1.0的随机数
         np.save(os.path.join(self.root_path, 'p2_2v.npy'), self.p2_2v)
-
+        
+        # 读取训练集的数据并做好预处理
         print("parsing train text...")
         self.bags_feature, self.labels = self.parse_sen(self.train_path, 'train')
         np.save(os.path.join(self.root_path, 'train', 'bags_feature.npy'), self.bags_feature)
@@ -64,14 +69,19 @@ class NYTLoad(object):
         np.save(os.path.join(self.root_path, 'test', 'bags_feature.npy'), self.bags_feature)
         np.save(os.path.join(self.root_path, 'test', 'labels.npy'), self.labels)
         print('save finish!')
-
+    #生成两个 （limit * 2 + 1）*pos_dim的二维矩阵，里面是-1.0到1.0的随机数
     def load_p2v(self):
+        # [array([0., 0., 0., 0., 0.])]
         pos1_vec = [np.zeros(self.pos_dim)]
+        # pos1_vec在后面添加（limit * 2 + 1）个范围在【-1.0，1.0】的pos_dim个的数组，如[array([0., 0., 0., 0., 0.]), array([ 0.856,  0.2353, -0.9926,  0.033, -0.61]), ...]
         pos1_vec.extend([np.random.uniform(low=-1.0, high=1.0, size=self.pos_dim) for _ in range(self.limit * 2 + 1)])
+        # pos2_vec同上
         pos2_vec = [np.zeros(self.pos_dim)]
         pos2_vec.extend([np.random.uniform(low=-1.0, high=1.0, size=self.pos_dim) for _ in range(self.limit * 2 + 1)])
+        # 返回的是数组，如[[ 0.          0.          0.          0.          0.        ]
+        #                    [ 0.503  -0.127 -0.734  0.44 -0.12  ]，....]
         return np.array(pos1_vec, dtype=np.float32), np.array(pos2_vec, dtype=np.float32)
-
+    #读取vector.txt
     def load_w2v(self):
         '''
         reading from vec.bin
@@ -83,7 +93,7 @@ class NYTLoad(object):
         f = open(self.w2v_path)
         # dim = int(f.readline().split()[1])
         # f = f.readlines()
-
+        # vecs存单词所对应的向量，1*50数组，wordlist是单词
         vecs = []
         for line in f:
             line = line.strip('\n').split()
@@ -93,22 +103,32 @@ class NYTLoad(object):
 
         #  wordlist.append('UNK')
         #  vecs.append(np.random.uniform(low=-0.5, high=0.5, size=dim))
+        # i是单词的下标，j是单词，word2id是{"单词"：下标, .....},id2word是{"下标"：单词, .....}
         word2id = {j: i for i, j in enumerate(wordlist)}
         id2word = {i: j for i, j in enumerate(wordlist)}
 
         return np.array(vecs, dtype=np.float32), word2id, id2word
-
+    # 对文件进行预处理
     def parse_sen(self, path, flag):
         '''
         parse the records in data
         '''
         all_sens =[]
         all_labels =[]
+        # 读取bags_train.txt文件
         f = open(path)
         while 1:
+#             每次循环，针对的是一个例子，共文件的6行
+            
+            # 对每行数据循环操作
             line = f.readline()
             if not line:
                 break
+            
+            #只针对这行，‘train’例：m.010039	m.01vwm8g	NA	99161,292483
+            # 对第4个进行操作，如果有逗号则切分；最后统计有多少个这个
+            # ‘test’ 中是 m.010039	m.01vwm8g	99161,292483
+            #同上
             if flag == 'train':
                 line = line.split('\t')
                 num = line[3].strip().split(',')
@@ -117,44 +137,78 @@ class NYTLoad(object):
                 line = line.split('\t')
                 num = line[2].strip().split(',')
                 num = len(num)
-
+                
+#             看num的数量，例子是只有1次，超过两次的加，如[[84,83,82,81,80,79,....]，[....],....]
+                
+            #第二个句子的数组，如[[84,83,82,81,80,79,....]]
             ldists = []
+            #第三个句子的数组，如[[50,49,48,47,46,45,....]]
             rdists = []
+            #第一个句子的数组，如[[0,2,4,525,6,112,15099,....]]
             sentences = []
+            #前两个label数组且每个值都加1，升序，[[1,35]]
             entitiesPos = []
+            #前两个label数组且每个值都加1，[[35,1],[36,11],...]
             pos = []
+            #最后的句子的数组，即位置如[[1,2,2,2,2,2,2,2,2,....]]
             masks = []
+            #第三个label数，循环后，第三个label的总和不足4个则用-1补足，超过4个则只取前4个的值，如[0,-1,-1,-1]
             rels = []
-
+            
             for i in range(num):
+                #针对每个例子的第二行，如：denton,daisy_hill,34,0,0,44
+                #ent_pair_line是 ['denton', 'daisy_hill', '34', '0', '0', '44']
                 ent_pair_line = f.readline().strip().split(',')
                 #  entities = ent_pair_line[:2]
                 # ignore the entities index in vocab
                 entities = [0, 0]
+                #取每个label的前两个并加1，如得到 [35, 1]
                 epos = list(map(lambda x: int(x) + 1, ent_pair_line[2:4]))
                 pos.append(epos)
+                #升序
                 epos.sort()
                 entitiesPos.append(epos)
-
+                #第三个label
                 rel = int(ent_pair_line[4])
                 rels.append(rel)
+                #针对每个例子的第三行，即第一个句子，['0', '2', '4', '525', '6', '112', '15099',.....]
                 sent = f.readline().strip().split(',')
+                #转成int，如[0, 2, 4, 525, 6, 112, 15099, .....]
                 sentences.append(list(map(lambda x: int(x), sent)))
+                #针对每个例子的第四行，即第二个句子
                 ldist = f.readline().strip().split(',')
+                #针对每个例子的第五行，即第三个句子
                 rdist = f.readline().strip().split(',')
+                #针对每个例子的第六行，即最后的位置
                 mask = f.readline().strip().split(",")
+                #同上功能
                 ldists.append(list(map(int, ldist)))
                 rdists.append(list(map(int, rdist)))
                 masks.append(list(map(int, mask)))
-
+            
+            #循环后，第三个label的总和不足4个则用-1补足，超过4个则只取前4个
             rels = list(set(rels))
             if len(rels) < 4:
                 rels.extend([-1] * (4 - len(rels)))
             else:
                 rels = rels[:4]
+                
+             '''
+            entities:[0, 0]
+            num:只针对这行，‘train’例：m.010039	m.01vwm8g	NA	99161,292483
+                对第4个进行操作，如果有逗号则切分；最后统计有多少个这个,就是num
+            sentences:第一个句子的数组，如[[0,2,4,525,6,112,15099,....]]
+            ldists:第二个句子的数组，如[[84,83,82,81,80,79,....]]
+            rdists:第三个句子的数组，如[[50,49,48,47,46,45,....]]
+            pos:前两个label数组且每个值都加1，[[35,1]]
+            entitiesPos:前两个label数组且每个值都加1，升序，[[1,35]]
+            masks:最后的句子的数组，即位置如[[1,2,2,2,2,2,2,2,2,....]]
+            '''
             bag = [entities, num, sentences, ldists, rdists, pos, entitiesPos, masks]
-
+#           这两个是读文件外的变量
+            #最终全部的rels，如[[0, -1, -1, -1], [0, -1, -1, -1],....]
             all_labels.append(rels)
+            #全部bag放在一起，如[[bag1],[bag2],...]
             all_sens += [bag]
 
         f.close()
@@ -174,6 +228,18 @@ class NYTLoad(object):
         update_bags = []
 
         for bag in bags:
+            '''  bag里的数据，按顺序排的
+            entities:[0, 0]
+            num:只针对这行，‘train’例：m.010039	m.01vwm8g	NA	99161,292483
+                对第4个进行操作，如果有逗号则切分；最后统计有多少个这个,就是num
+            sentences:第一个句子的数组，如[[0,2,4,525,6,112,15099,....]]
+            ldists:第二个句子的数组，如[[84,83,82,81,80,79,....]]
+            rdists:第三个句子的数组，如[[50,49,48,47,46,45,....]]
+            pos:前两个label数组且每个值都加1，[[35,1]]
+            entitiesPos:前两个label数组且每个值都加1，升序，[[1,35]]
+            masks:最后的句子的数组，即位置如[[1,2,2,2,2,2,2,2,2,....]]
+            '''
+            
             es, num, sens, ldists, rdists, pos, enPos, masks = bag
             new_sen = []
             new_pos = []
