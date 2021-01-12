@@ -63,10 +63,24 @@ class NYTLoad(object):
         
         # 读取训练集的数据并做好预处理
         print("parsing train text...")
+        '''  bags_feature中的一个bag为
+                es:[0, 0]
+                num:只针对这行，‘train’例：m.010039	m.01vwm8g	NA	99161,292483
+                    对第4个进行操作，如果有逗号则切分；最后统计有多少个这个,就是num
+                    (bag 里面一样，不变)
+                new_sen:第一个句子的数组,数据不变，数组后面用0填充了，如[[0,2,4,525,6,112,15099,....,0,0,0]]
+                new_pos:[第二个句子,第三个句子]的数组,数据不变，数组后面用0填充了，如[[84,83,82,81,80,79,....,0,0,0],
+                                                                           [50,49,48,47,46,45,....,0,0,0]]
+                new_entPos:前两个label数组且每个值都加1，升序，[[1,35]]
+                new_masks:最后的句子的数组，据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0]]
+         '''
+        #parse_sen: 最终全部的rels的数组，如[[0, -1, -1, -1], [0, -1, -1, -1],....]
+        #           rels 第三个label的总和不足4个则用-1补足，超过4个则只取前4个,如[0, -1, -1, -1]
         self.bags_feature, self.labels = self.parse_sen(self.train_path, 'train')
         np.save(os.path.join(self.root_path, 'train', 'bags_feature.npy'), self.bags_feature)
         np.save(os.path.join(self.root_path, 'train', 'labels.npy'), self.labels)
-
+        
+        #测试集数据预处理，同上
         print("parsing test text...")
         self.bags_feature, self.labels = self.parse_sen(self.test_path, 'test')
         np.save(os.path.join(self.root_path, 'test', 'bags_feature.npy'), self.bags_feature)
@@ -216,7 +230,17 @@ class NYTLoad(object):
 
         f.close()
         bags_feature = self.get_sentence_feature(all_sens)
-
+        '''  bags_feature
+                es:[0, 0]
+                num:只针对这行，‘train’例：m.010039	m.01vwm8g	NA	99161,292483
+                    对第4个进行操作，如果有逗号则切分；最后统计有多少个这个,就是num
+                    (bag 里面一样，不变)
+                new_sen:第一个句子的数组,数据不变，数组后面用0填充了，如[[0,2,4,525,6,112,15099,....,0,0,0]]
+                new_pos:[第二个句子,第三个句子]的数组,数据不变，数组后面用0填充了，如[[84,83,82,81,80,79,....,0,0,0],
+                                                                           [50,49,48,47,46,45,....,0,0,0]]
+                new_entPos:前两个label数组且每个值都加1，升序，[[1,35]]
+                new_masks:最后的句子的数组，据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0]]
+         '''
         return bags_feature, all_labels
 
     def get_sentence_feature(self, bags):
@@ -238,7 +262,7 @@ class NYTLoad(object):
             sentences:第一个句子的数组，如[[0,2,4,525,6,112,15099,....]]
             ldists:第二个句子的数组，如[[84,83,82,81,80,79,....]]
             rdists:第三个句子的数组，如[[50,49,48,47,46,45,....]]
-            pos:前两个label数组且每个值都加1，[[35,1]]
+            pos:前两个label数组且每个值都加1，[[35,1]]（entitiesPos升序后，也变成entitiesPos的数据）
             entitiesPos:前两个label数组且每个值都加1，升序，[[1,35]]
             masks:最后的句子的数组，即位置如[[1,2,2,2,2,2,2,2,2,....]]
             '''
@@ -249,13 +273,30 @@ class NYTLoad(object):
             new_masks= []
             #idx下标，sen第一个句子的数组
             for idx, sen in enumerate(sens):
+                '''  
+                sen:数据不变，数组后面用0填充了
+                pf1:每个数值加1，数组后面用0填充了
+                pf2:每个数值加1，数组后面用0填充了
+                pos:不变
+                mask:不变，再放到数组里
+                '''
                 sen, pf1, pf2, pos, mask = self.get_pad_sen_pos(sen, ldists[idx], rdists[idx], enPos[idx], masks[idx])
                 new_sen.append(sen)
                 new_pos.append([pf1, pf2])
                 new_entPos.append(pos)
                 new_masks.append(mask)
             update_bags.append([es, num, new_sen, new_pos, new_entPos, new_masks])
-
+             '''  update_bags
+                es:[0, 0]
+                num:只针对这行，‘train’例：m.010039	m.01vwm8g	NA	99161,292483
+                    对第4个进行操作，如果有逗号则切分；最后统计有多少个这个,就是num
+                    (bag 里面一样，不变)
+                new_sen:第一个句子的数组,数据不变，数组后面用0填充了，如[[0,2,4,525,6,112,15099,....,0,0,0]]
+                new_pos:[第二个句子,第三个句子]的数组,数据不变，数组后面用0填充了，如[[84,83,82,81,80,79,....,0,0,0],
+                                                                           [50,49,48,47,46,45,....,0,0,0]]
+                new_entPos:前两个label数组且每个值都加1，升序，[[1,35]]
+                new_masks:最后的句子的数组，据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0]]
+             '''
         return update_bags
 
     def get_pad_sen_pos(self, sen, ldist, rdist, pos, mask):
@@ -284,7 +325,8 @@ class NYTLoad(object):
         else:
             #在pos的两个数中展开，如pos为[1,35],则idx为[1,2,3,....,35]
             idx = [i for i in range(pos[0], pos[1] + 1)]
-            #如果
+            #如果idx大于设定的最大长度则只算到最大长度处。第一个句子不变，剩下两个每个数值加1，位置变量不变，全部放到新数组里 
+            #pos的值改为[1,self.max_len-1]
             if len(idx) > self.max_len:
                 idx = idx[:self.max_len]
                 for i in idx:
@@ -294,14 +336,17 @@ class NYTLoad(object):
                     masks.append(mask[i])
                 pos[0] = 1
                 pos[1] = len(idx) - 1
+            #如果idx不大于设定的最大长度，不改变idx。第一个句子不变，剩下两个每个数值加1，位置变量不变，全部放到新数组里 
+            #pos的值改为[1,self.max_len-1]
             else:
                 for i in idx:
                     x.append(sen[i])
                     pf1.append(ldist[i] + 1)
                     pf2.append(rdist[i] + 1)
                     masks.append(mask[i])
-
+                #before记录最开始在txt文本里的一个label数的值（pos经过排序后，无法确定是第一个还是第二个label）
                 before = pos[0] - 1
+                #after是pos的第二个数（最大值）再加1
                 after = pos[1] + 1
                 pos[0] = 1
                 pos[1] = len(idx) - 1
