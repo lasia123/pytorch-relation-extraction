@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 
+
+'''主要在dataset里的nyt.py和filternyt.py的里对数据的预处理。
+data_root:数据存放的路径
+w2v.npy:是所有单词对应的向量数组，[[...],[....]....]
+p1_2v.npy:是（limit * 2 + 1）*pos_dim的二维矩阵，里面是-1.0到1.0的随机数
+p2_2v.npy是（limit * 2 + 1）*pos_dim的二维矩阵，里面是-1.0到1.0的随机数
+'''
 data_dic ={
     'NYT': {
         'data_root': './dataset/NYT/',
@@ -18,7 +25,6 @@ data_dic ={
         'rel_num': 27
     }
 }
-
 
 class DefaultConfig(object):
 
@@ -72,9 +78,12 @@ def parse(self, kwargs):
         user can update the default hyperparamter
         '''
         for k, v in kwargs.items():
+            # 判断k是否在self(opt)里面，如果没有则输出下面
             if not hasattr(self, k):
                 raise Exception('opt has No key: {}'.format(k))
+            # 给self(opt)里赋值，即字典里增加  k：v 的键值对
             setattr(self, k, v)
+        # 将data_list里的键值对给self(opt)
         data_list = ['data_root', 'w2v_path', 'rel_num', 'vocab_size', 'p1_2v_path', 'p2_2v_path']
         for r in data_list:
             setattr(self, r, data_dic[self.data][r])
