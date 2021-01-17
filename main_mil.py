@@ -81,7 +81,11 @@ def train(**kwargs):
             model.batch_size = opt.batch_size
 
             optimizer.zero_grad()
-
+            
+            '''
+            model(data, train=True)等价于调用了 model.forward(data, train=True)
+            只是隐藏了
+            '''
             out = model(data, train=True)
             loss = criterion(out, label)
             loss.backward()
