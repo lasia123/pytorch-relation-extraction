@@ -154,7 +154,8 @@ class PCNN_ONE(BasicModule):
         return out
 
     def forward(self, x, train=False):
-
+        '''传进的x，就是opt在config.py中初始化的各种数值
+        '''
         insEnt, _, insX, insPFs, insPool, insMasks = x
         insPF1, insPF2 = [i.squeeze(1) for i in torch.split(insPFs, 1, 1)]
 
