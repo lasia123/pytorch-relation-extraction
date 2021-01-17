@@ -20,10 +20,13 @@ def collate_fn(batch):
 def test(**kwargs):
     pass
 
-
+# 设置随机数种子
 def setup_seed(seed):
+    # 为CPU设置种子用于生成随机数
     torch.manual_seed(seed)
+    #为所有的GPU设置随机种子
     torch.cuda.manual_seed_all(seed)
+    # 按顺序产生一组固定的数组，如果使用相同的seed值，则每次生成的随机数都相同
     np.random.seed(seed)
     torch.backends.cudnn.deterministic = True
 
