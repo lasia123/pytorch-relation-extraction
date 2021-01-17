@@ -13,17 +13,29 @@ class PCNN_ONE(BasicModule):
     '''
     def __init__(self, opt):
         super(PCNN_ONE, self).__init__()
-
+        # 初始的opt在config.py中可以看到数据组成,在main_mil.py中加入了新的数据
         self.opt = opt
 
         self.model_name = 'PCNN_ONE'
-
+        '''输入是一个下标的列表，输出是对应的词嵌入
+        创建矩阵，如：self.opt.vocab_size * self.opt.word_dim大小的，即vocab_size个词，每个词word_dim维
+        self.word_embs:存文本的对应向量
+        self.pos1_embs:存相对实体1的相对位置，各个词离entity的距离进行编码
+        self.pos2_embs:存相对实体2的相对位置，各个词离entity的距离进行编码
+        '''
         self.word_embs = nn.Embedding(self.opt.vocab_size, self.opt.word_dim)
         self.pos1_embs = nn.Embedding(self.opt.pos_size, self.opt.pos_dim)
         self.pos2_embs = nn.Embedding(self.opt.pos_size, self.opt.pos_dim)
-
+        
+        # 数值大小是由于需要将位置特征和文本特征拼接，每个词文本后要拼接相对entity1，entity2的位置
         feature_dim = self.opt.word_dim + self.opt.pos_dim * 2
-
+        '''设置过滤器的大小
+        nn.Conv2d(in_channels, out_channels, kernel_size, padding=0)
+        in_channels:输入的通道数
+        out_channels:由卷积产生的通道数
+        kernel_size:卷积核尺寸
+        padding=0:(补0)：控制zero-padding的数目。
+        '''
         # for more filter size
         self.convs = nn.ModuleList([nn.Conv2d(1, self.opt.filters_num, (k, feature_dim), padding=(int(k / 2), 0)) for k in self.opt.filters])
 
@@ -31,19 +43,33 @@ class PCNN_ONE(BasicModule):
 
         if self.opt.use_pcnn:
             all_filter_num = all_filter_num * 3
+            '''
+            新建一个tensor([[0., 0., 0.],
+                           [1., 0., 0.],
+                           [0., 1., 0.],
+                           [0., 0., 1.]])
+            '''
             masks = torch.FloatTensor(([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]))
             if self.opt.use_gpu:
                 masks = masks.cuda()
+            '''创一个矩阵
+            mask_embedding.weight初始值：tensor([[ 0.4245,  1.1851, -0.1532],
+                                                [ 0.8619, -0.8674, -1.0419],
+                                                [-0.7182, -2.2017,  2.9141],
+                                                [-0.2915, -1.6366, -0.8132]], requires_grad=True)
+            将masks的值复制到mask_embedding.weight的data上，同时将requires_grad改为False
+            '''
             self.mask_embedding = nn.Embedding(4, 3)
             self.mask_embedding.weight.data.copy_(masks)
             self.mask_embedding.weight.requires_grad = False
-
+        # 把拥有all_filter_num种特征值的那种样本输入转变成拥有self.opt.rel_num种特征值的输出，
         self.linear = nn.Linear(all_filter_num, self.opt.rel_num)
+        # 在不同的训练过程中随机扔掉一部分神经元,self.opt.drop_out是每个元素被保留下来的概率，初始中设定为0.5
         self.dropout = nn.Dropout(self.opt.drop_out)
 
         self.init_model_weight()
         self.init_word_emb()
-
+        
     def init_model_weight(self):
         '''
         use xavier to init
@@ -54,10 +80,20 @@ class PCNN_ONE(BasicModule):
 
         nn.init.xavier_uniform_(self.linear.weight)
         nn.init.constant_(self.linear.bias, 0.0)
-
+   
+    # 处理单词对应的向量表、实体1、2对应的随机矩阵表，并赋值到opt中
     def init_word_emb(self):
 
         def p_2norm(path):
+            '''
+            从np.load(path)创建一个张量，返回的张量和np.load(path)共享同一内存。对张量的修改将反映在np.load(path)中，反之亦然
+            如果opt的norm_emb为真，则v变成v÷(v.norm(2, 1).unsqueeze(1))
+            v.norm(2, 1):对每行数据求 2 范数,即每个数平方后相加，再开方，最终得到包含每行的2范数的一维数组
+            v.norm(2, 1).unsqueeze(1):增加一维将其变为二维数组
+            v[v != v] = 0.0 : v中有数据不同的置为0
+            :param path:
+            :return:处理后的v
+            '''
             v = torch.from_numpy(np.load(path))
             if self.opt.norm_emb:
                 v = torch.div(v, v.norm(2, 1).unsqueeze(1))
@@ -68,6 +104,7 @@ class PCNN_ONE(BasicModule):
         p1_2v = p_2norm(self.opt.p1_2v_path)
         p2_2v = p_2norm(self.opt.p2_2v_path)
 
+        # 如果使用gpu则对数据进行格式处理再赋值，否则直接赋值
         if self.opt.use_gpu:
             self.word_embs.weight.data.copy_(w2v.cuda())
             self.pos1_embs.weight.data.copy_(p1_2v.cuda())
