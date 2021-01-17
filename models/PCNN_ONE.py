@@ -35,6 +35,9 @@ class PCNN_ONE(BasicModule):
         out_channels:由卷积产生的通道数
         kernel_size:卷积核尺寸
         padding=0:(补0)：控制zero-padding的数目。
+        self.convs :ModuleList(
+                              (0): Conv2d(1, 230, kernel_size=(3, 60), stride=(1, 1), padding=(1, 0))
+                                )
         '''
         # for more filter size
         self.convs = nn.ModuleList([nn.Conv2d(1, self.opt.filters_num, (k, feature_dim), padding=(int(k / 2), 0)) for k in self.opt.filters])
@@ -63,6 +66,7 @@ class PCNN_ONE(BasicModule):
             self.mask_embedding.weight.data.copy_(masks)
             self.mask_embedding.weight.requires_grad = False
         # 把拥有all_filter_num种特征值的那种样本输入转变成拥有self.opt.rel_num种特征值的输出，
+        # self.linear：Linear(in_features=230, out_features=53, bias=True)
         self.linear = nn.Linear(all_filter_num, self.opt.rel_num)
         # 在不同的训练过程中随机扔掉一部分神经元,self.opt.drop_out是每个元素被保留下来的概率，初始中设定为0.5
         self.dropout = nn.Dropout(self.opt.drop_out)
@@ -73,9 +77,12 @@ class PCNN_ONE(BasicModule):
     def init_model_weight(self):
         '''
         use xavier to init
+        初始化
         '''
         for conv in self.convs:
+            # 是一个服从均匀分布的Glorot初始化器
             nn.init.xavier_uniform_(conv.weight)
+            # 用值0.0填充向量conv.bias
             nn.init.constant_(conv.bias, 0.0)
 
         nn.init.xavier_uniform_(self.linear.weight)
