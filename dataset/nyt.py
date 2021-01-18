@@ -169,7 +169,7 @@ class NYTLoad(object):
             pos = []
             #最后的句子的数组，即位置如[[1,2,2,2,2,2,2,2,2,....]]
             masks = []
-            #label数，循环后，第三个label的总和不足4个则用-1补足，超过4个则只取前4个的值，如[0,-1,-1,-1]
+            #label数，循环后，label的总和不足4个则用-1补足，超过4个则只取前4个的值，如[0,-1,-1,-1]
             rels = []
             
             for i in range(num):
@@ -325,7 +325,7 @@ class NYTLoad(object):
         else:
             #在pos的两个数中展开，如pos为[1,35],则idx为[1,2,3,....,35]
             idx = [i for i in range(pos[0], pos[1] + 1)]
-            #如果idx大于设定的最大长度则只算到最大长度处。第一个句子不变，剩下两个每个数值加1，位置变量不变，全部放到新数组里 
+            #如果idx大于设定的最大长度则只算到最大长度处。句子不变，剩下相对实体1、2的位置每个数值加1，位置变量不变，全部放到新数组里 
             #pos的值改为[1,self.max_len-1]
             if len(idx) > self.max_len:
                 idx = idx[:self.max_len]
