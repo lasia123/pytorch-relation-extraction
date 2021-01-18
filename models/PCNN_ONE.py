@@ -154,8 +154,18 @@ class PCNN_ONE(BasicModule):
         return out
 
     def forward(self, x, train=False):
-        '''传进的x，就是opt在config.py中初始化的各种数值
-        '''
+        '''x是bag的数据处理后的tensor，如对于某一个bag中的数据，x的格式则为 tensor(bag的数据, device='cuda:0')
+        bags_feature中的一个bag为
+                es:[0, 0]
+                num:只针对这行，‘train’例：m.010039	m.01vwm8g	NA	99161,292483
+                    对第4个进行操作，如果有逗号则切分；最后统计有多少个这个,就是num
+                    (bag 里面一样，不变)
+                new_sen:句子的数组,数据不变，数组后面用0填充了，如[[0,2,4,525,6,112,15099,....,0,0,0]]
+                new_pos:[相对实体1的位置,相对实体2的位置]的数组,数据不变，数组后面用0填充了，如[[84,83,82,81,80,79,....,0,0,0],
+                                                                           [50,49,48,47,46,45,....,0,0,0]]
+                new_entPos:实体1和实体2在词表的下标的位置且每个值都加1，升序，[[1,35]]
+                new_masks:最后的句子的数组，据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0]]
+         '''
         insEnt, _, insX, insPFs, insPool, insMasks = x
         insPF1, insPF2 = [i.squeeze(1) for i in torch.split(insPFs, 1, 1)]
 
