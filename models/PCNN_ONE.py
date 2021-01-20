@@ -126,10 +126,30 @@ class PCNN_ONE(BasicModule):
         refer: https://github.com/thunlp/OpenNRE
         A fast piecewise pooling using mask
         '''
+        '''
+        x: 将三个三维矩阵按维数2拼接 word_emb:  torch.Size([3, 82, 50])   3维，3个里面是82*50的二维数组
+                                 pf1_emb:  torch.Size([3, 82, 5])     3维，3个里面是82*5的二维数组
+                                 pf2_emb:  torch.Size([3, 82, 5])     3维，3个里面是82*5的二维数组
+        mask: bag的数据处理后的tensor，格式则为 tensor(bag的数据, device='cuda:0')
+        这个数据是最后的句子的数组（位置向量），数据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0],[],...]
+        在x的 -1 位置增加1维，即 x 由 torch.Size([3, 230, 82]) 变成 torch.Size([3, 230, 82, 1])
+        然后将x中 维度索引1和维度索引2交换位置，其他不变，即 torch.Size([3, 82, 230, 1])
+        '''
         x = x.unsqueeze(-1).permute(0, 2, 1, -1)
+        '''将数组传进去后返回的数据增加了一维，是由数组中的每一个数所代表的数组替换了原数字。
+            mask_embedding：tensor([[0, 0, 0], 
+                                    [1, 0, 0],
+                                    [0, 1, 0], 
+                                    [0, 0, 1]], requires_grad=True)
+            mask中的数字范围是0-3，所以将mask里的数字替换为mask_embedding下标所对应的数组，然后在-2位置增加1维，将torch.Size([3, 82, 3])变为torch.Size([3, 82, 1, 3])
+            然后矩阵 * 100
+        '''
         masks = self.mask_embedding(mask).unsqueeze(-2) * 100
+        #两矩阵相加
         x = masks.float() + x
+        # x 每行的最大值 -   tensor([100.])  x ： torch.Size([3, 230, 1])
         x = torch.max(x, 1)[0] - torch.FloatTensor([100]).cuda()
+        # 相当于 将x变为【 ，230*1】的数组，即x 变为 torch.Size([3, 230])
         x = x.view(-1, x.size(1) * x.size(2))
         return x
 
@@ -160,30 +180,47 @@ class PCNN_ONE(BasicModule):
                 num:只针对这行，‘train’例：m.010039	m.01vwm8g	NA	99161,292483
                     对第4个进行操作，如果有逗号则切分；最后统计有多少个这个,就是num
                     (bag 里面一样，不变)
-                new_sen:句子的数组,数据不变，数组后面用0填充了，如[[0,2,4,525,6,112,15099,....,0,0,0]]
-                new_pos:[相对实体1的位置,相对实体2的位置]的数组,数据不变，数组后面用0填充了，如[[84,83,82,81,80,79,....,0,0,0],
+                new_sen:句子的数组,数据不变，数组后面用0填充了，如[[0,2,4,525,6,112,15099,....,0,0,0],[],...]
+                new_pos:[[相对实体1的位置,相对实体2的位置],[],...]的数组,数据不变，数组后面用0填充了，如[[84,83,82,81,80,79,....,0,0,0],
                                                                            [50,49,48,47,46,45,....,0,0,0]]
-                new_entPos:实体1和实体2在词表的下标的位置且每个值都加1，升序，[[1,35]]
-                new_masks:最后的句子的数组，据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0]]
+                new_entPos:实体1和实体2在词表的下标的位置且每个值都加1，升序，[[1,35],[],...]
+                new_masks:最后的句子的数组，数据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0],[],...]
          '''
         insEnt, _, insX, insPFs, insPool, insMasks = x
+        #将insPFs的([[相对实体1的位置,相对实体2的位置],[],...], device='cuda:0')的数组中，
+        #分开为insPF1 ：([[相对实体1的位置],[],...], device='cuda:0')，insPF2 ：([[相对实体2的位置],[],...], device='cuda:0')
         insPF1, insPF2 = [i.squeeze(1) for i in torch.split(insPFs, 1, 1)]
-
+        # 91行：处理单词对应的向量表、实体1、2对应的随机矩阵表，并赋值到self.word_embs，self.pos1_embs，self.pos2_embs中
+        '''将数组传进去后返回的数据增加了一维，是由数组中的每一个数所代表的数组替换了原数字。
+        如insX为[[14,2764,,...]]那么word_emb则为[[[0.0148,0.0565,....],[0.0607,-0.0603,...],....[...]]]
+        在word_emb中，insX的14替换成self.word_embs里下标为14的数组
+        下同
+        例，  word_emb:  torch.Size([3, 82, 50])   3维，3个里面是82*50的二维数组
+             pf1_emb:  torch.Size([3, 82, 5])     3维，3个里面是82*5的二维数组
+             pf2_emb:  torch.Size([3, 82, 5])     3维，3个里面是82*5的二维数组
+        '''
         word_emb = self.word_embs(insX)
         pf1_emb = self.pos1_embs(insPF1)
         pf2_emb = self.pos2_embs(insPF2)
-
+        #将三个三维矩阵按维数2拼接，（维数0：行，维数1：列），此x：torch.Size([3, 82, 60])
         x = torch.cat([word_emb, pf1_emb, pf2_emb], 2)
+        #又在维度1加一维 ： torch.Size([3, 1, 82, 60])
         x = x.unsqueeze(1)
+        #随机扔掉一部分神经元，x的维度不变
         x = self.dropout(x)
-
+        #每个过滤器都处理x后 x变为 torch.Size([3, 230, 82, 1])，然后尝试将哪一个维度进行压缩。
+        #如果被指定的维度其维数为1，则压缩，反之不对该维度操作，如这里就将第3维压缩。
+        #最终把 torch.Size([3, 230, 82]) 的x放进  [] 中
         x = [conv(x).squeeze(3) for conv in self.convs]
+        #如果模型用了pcnn 则用mask_piece_pooling否则调用F.max_pool1d
         if self.opt.use_pcnn:
             x = [self.mask_piece_pooling(i, insMasks) for i in x]
             # x = [self.piece_max_pooling(i, insPool) for i in x]
         else:
             x = [F.max_pool1d(i, i.size(2)).squeeze(2) for i in x]
+        # 对x按列拼接然后求其双曲正切值
         x = torch.cat(x, 1).tanh()
+        #随机扔掉一部分神经元，x的维度不变
         x = self.dropout(x)
         x = self.linear(x)
 
