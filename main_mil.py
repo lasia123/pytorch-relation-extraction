@@ -134,19 +134,29 @@ def train(**kwargs):
                 label = torch.LongTensor(label).cuda()
             else:
                 label = torch.LongTensor(label)
-            
+            '''
+            data:  [select_ent, select_num, select_sen, select_pf, select_pool, select_mask],里面都是tensor格式
+            select_ent, select_num：存的是，每个bag里的es和num [[bag1的对应数据],[bag2],....]
+            select_sen, select_pf, select_pool, select_mask：每个bag里的对应的数据中的一条的数组集合
+            如select_sen里的是每个bag里sen中的一个句子数组（怎么选择这个句子则是由select_instance里的max_ins_id下标决定）
+            [[bag1的对应数据],[bag2],....]
+            '''
             data = select_instance(model, data, label)
             model.batch_size = opt.batch_size
-
+            # 将梯度初始化为零
             optimizer.zero_grad()
             
             '''
             model(data, train=True)等价于调用了 model.forward(data, train=True)
             只是隐藏了
             '''
+            #向前传播，求出预测的值
             out = model(data, train=True)
+            #求loss
             loss = criterion(out, label)
+            #反向传播求梯度
             loss.backward()
+            #更新所有参数
             optimizer.step()
 
             total_loss += loss.item()
@@ -175,6 +185,14 @@ def select_instance(model, batch_data, labels):
         labels :将每个bag的第一个句子中的label取出作为一个数组
     '''
     model.eval()
+    ''' out经过模型之后得到预测的数据值，然后拿到max_ins_id
+    select_ent :将各bag的es继续放进去，[[bag1中es],[bag2],....]
+    select_num :将各bag的num继续放进去，[[bag1中num],[bag2],....]
+    select_sen :预测的对应的数据，即对应max_ins_id下标的句子的数组，[[bag1中的new_sen[max_ins_id]],[bag2],....]
+    select_pf :预测的对应的数据，即对应max_ins_id下标的[相对实体1的位置,相对实体2的位置]的数组，[[bag1中的new_pos[max_ins_id]],[bag2],....]
+    select_pool :预测的对应的数据，即对应max_ins_id下标的实体1和实体2在词表的下标的位置且每个值都加1，[[bag1中的new_entPos[max_ins_id]],[bag2],....]
+    select_mask :预测的对应的数据，即对应max_ins_id下标的最后的句子的数组，[[bag1中的new_masks[max_ins_id]],[bag2],....]
+    '''
     select_ent = []
     select_num = []
     select_sen = []
@@ -194,7 +212,7 @@ def select_instance(model, batch_data, labels):
                         new_entPos:实体1和实体2在词表的下标的位置且每个值都加1，升序，[[1,35]]
                         new_masks:最后的句子的数组，数据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0]]
         insNum: 每个bag中句子的数量
-        label: 对应bag中的第一个label，如：tensor(0, device='cuda:0')
+        label: 对应bag中的第一个句子中的label，如：tensor(0, device='cuda:0')
         '''
         insNum = bag[1]
         label = labels[idx]
@@ -207,10 +225,18 @@ def select_instance(model, batch_data, labels):
                 data = map(lambda x: torch.LongTensor(x).cuda(), bag)
             else:
                 data = map(lambda x: torch.LongTensor(x), bag)
-            #调用向前传播，PCNN_ONE.py里的forward函数
+            #调用向前传播，PCNN_ONE.py里的forward函数，out的大小变为 torch.Size([？, 27])，行有所不同
             out = model(data)
 
             #  max_ins_id = torch.max(torch.max(out, 1)[0], 0)[1]
+            '''
+            out[:, label] ：将out中的第label列的数据（label: 对应bag中的第一个句子中的label）
+            torch.max(out[:, label], 0)：从拿到的列数据取其中最大值，torch.max(out[:, label], 0)[1]：最大值的下标
+            例 若 out[:, label]为 tensor([0.0000e+00, 0.0000e+00, 6.3505e-14])
+               则 torch.max(out[:, label], 0)： torch.return_types.max( values=tensor(0.), indices=tensor(0))
+                  torch.max(out[:, label], 0)[1]：tensor(0)
+            然后判断opt是否使用gpu，然后用对应的方法拿出其中的值
+            '''
             max_ins_id = torch.max(out[:, label], 0)[1]
 
             if opt.use_gpu:
@@ -218,19 +244,19 @@ def select_instance(model, batch_data, labels):
                 max_ins_id = max_ins_id.item()
             else:
                 max_ins_id = max_ins_id.data.numpy()[0]
-
+        #取的是对应max_ins_id下标的句子向量数组、[相对实体1的位置,相对实体2的位置]的数组、实体1和实体2在词表的下标的位置且每个值都加1、最后的句子的数组
         max_sen = bag[2][max_ins_id]
         max_pf = bag[3][max_ins_id]
         max_pool = bag[4][max_ins_id]
         max_mask = bag[5][max_ins_id]
-
+        #前两个不变，其他取的都是每个包里的对应max_ins_id下标的句子信息
         select_ent.append(bag[0])
         select_num.append(bag[1])
         select_sen.append(max_sen)
         select_pf.append(max_pf)
         select_pool.append(max_pool)
         select_mask.append(max_mask)
-
+    #将select_ent, select_num, select_sen, select_pf, select_pool, select_mask里的数据改成tensor，然后都放在数组里赋值给data
     if opt.use_gpu:
         data = map(lambda x: torch.LongTensor(x).cuda(), [select_ent, select_num, select_sen, select_pf, select_pool, select_mask])
     else:
@@ -248,27 +274,61 @@ def predict(model, test_data_loader):
     true_y = []
     pred_p = []
     for idx, (data, labels) in enumerate(test_data_loader):
+        '''
+        data 元组: （bag1, bag2,bag3,.....）bag的数据内容如上
+        labels 元组:([bag1的rels]，[],.....)
+        '''
         true_y.extend(labels)
         for bag in data:
+             '''
+                bag为
+                    es:[0, 0]
+                    num:只针对这行，‘train’例：m.010039	m.01vwm8g	NA	99161,292483
+                        对第4个进行操作，如果有逗号则切分；最后统计有多少个这个,就是num(bag 里面一样，不变)
+                    new_sen:句子的数组,数据不变，数组后面用0填充了，如[[0,2,4,525,6,112,15099,....,0,0,0]]
+                    new_pos:[相对实体1的位置,相对实体2的位置]的数组,数据不变，数组后面用0填充了，如[[84,83,82,81,80,79,....,0,0,0],
+                                                                                   [50,49,48,47,46,45,....,0,0,0]]
+                    new_entPos:实体1和实体2在词表的下标的位置且每个值都加1，升序，[[1,35]]
+                    new_masks:最后的句子的数组，数据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0]]
+        insNum: 每个bag中句子的数量
+        '''
             insNum = bag[1]
             model.batch_size = insNum
+            #将bag里的每个数据变为tensor格式
             if opt.use_gpu:
                 data = map(lambda x: torch.LongTensor(x).cuda(), bag)
             else:
                 data = map(lambda x: torch.LongTensor(x), bag)
-
+            #向前传播
             out = model(data)
+            #将out一行一行归一化处理
             out = F.softmax(out, 1)
+            '''torch.max(out, 1)：从每行中取最大值组成tensor格式，
+            如对于tensor([[0.0000e+00, 0.0000e+00, 1.4013e-45],
+                        [0.0000e+00, 0.0000e+00, 0.0000e+00],
+                        [2.8906e-01, 4.5632e-41, 2.1860e+01]])
+                经过取每行最大值为
+            torch.return_types.max(
+                values=tensor([1.4013e-45, 0.0000e+00, 2.1860e+01]),
+                indices=tensor([2, 2, 2]))
+            通过下方的处理后 max_ins_prob记录的是每行最大值的数组，如[1.4012985e-45 0.0000000e+00 2.1860031e+01]
+                          max_ins_label记录的是每行最大值的下标，如 [2 2 2]
+            max_ins_prob, max_ins_label 为普通数组格式，不是tensor
+            '''
             max_ins_prob, max_ins_label = map(lambda x: x.data.cpu().numpy(), torch.max(out, 1))
             tmp_prob = -1.0
             tmp_NA_prob = -1.0
             pred_label = 0
             pos_flag = False
-
+            
             for i in range(insNum):
+                #当pos_flag为真且 out数据中第i行最大值的下标要小于1， 即out中第i行的最大值在第一个数
                 if pos_flag and max_ins_label[i] < 1:
                     continue
                 else:
+                    #当out中i行的最大值的下标不是0时（即out中第i行的最大值不在第一个数），令当out中i行的最大值的下标pos_flag = True
+                    #        同时，out中第i行的最大值大于 -1.0 则令pred_label等于out中第i行的最大值的下标，tmp_prob 等于中第i行的最大值
+                    #当out中i行的最大值的下标是0时（即out中第i行的最大值在第一个数），pos_flag不改变，则tmp_NA_prob取 -1.0和out中第i行的最大值 两者中的最大值
                     if max_ins_label[i] > 0:
                         pos_flag = True
                         if max_ins_prob[i] > tmp_prob:
