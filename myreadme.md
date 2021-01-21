@@ -10,4 +10,7 @@
 21.01.20
 --
 	models/PCNN_ONE.py 标注完成  
-
+21.01.21
+--
+	main_mil.py标注到predict了  
+	
