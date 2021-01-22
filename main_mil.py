@@ -163,13 +163,33 @@ def train(**kwargs):
 
         if epoch < -1:
             continue
+        '''
+        true_y:tesr_data_loader中的lanbels放到新的数组里，[[bag1的rel]，[],.....,]labels中的一个rel为：[0, -1, -1, -1]，一个bag中的label的总和不足4个则用-1补足，超过4个则只取前4个,如[0, -1, -1, -1]
+        pred_y:把每个bag经过向前传播后得到out。当out中第i行的最大值不在第一个数且out中第i行的最大值大于 -1.0，pred_label为out中第i行最大值的下标，否则为0，[bag1的预测最大值的下标，bag2....,....]
+        pred_p:把每个bag经过向前传播后得到out。out中前i行的每行最大值的最大的那个数的值，如果大于-1.0则为tmp_prob或tmp_NA_prob，否则为-1.0，最后将tmp_prob或tmp_NA_prob加入pred_p数组中
+                以上的i的范围均为[0, bag中句子的个数]
+        '''
         true_y, pred_y, pred_p = predict(model, test_data_loader)
-        all_pre, all_rec, fp_res = eval_metric(true_y, pred_y, pred_p)
+        '''调用utils.py里的eval_metric函数得到pr，re fp_re的数组
+        all_pre：每次循环计算得到的pr值，且保证下一个值不会和前一个重复。循环次数由true_y的个数决定（即test_data_loader中bag的个数）
+        all_rec：每次循环计算得到的recall值，且保证下一个值不会和前一个重复。循环次数由true_y的个数决定（即test_data_loader中bag的个数）
+        fp_res： 第idx个最大值的下标（即这个最大值处于第几个bag） 和  对应的bag的经过向前传播后得到out。out中前i行的每行最大值的最大的那个数的值
+            有关fp_res的补充：
+                 idx表示第几个bag，i：第idx个最大值的下标（即这个最大值处于第几个bag），所对应的bag的rel数组
+                 第idx个最大值的下标（即这个最大值处于第几个bag），所对应的bag的第一个句子的label
+        如果 第idx个最大值的下标（即这个最大值处于第几个bag），所对应的bag的第一个句子的label为0，
+            且j(第idx个最大值的下标（即这个最大值处于第几个bag），所对应的bag，处理后得到out中最大值的下标)大于0，即该最大值位置不是第一个
+               才算入fp_res中
 
+        '''
+        all_pre, all_rec, fp_res = eval_metric(true_y, pred_y, pred_p)
+        #得到最新算到的pre和recall
         last_pre, last_rec = all_pre[-1], all_rec[-1]
         if last_pre > 0.24 and last_rec > 0.24:
+            #将数据all_pre, all_rec, fp_res写入相关文件中
             save_pr(opt.result_dir, model.model_name, epoch, all_pre, all_rec, fp_res, opt=opt.print_opt)
             print('{} Epoch {} save pr'.format(now(), epoch + 1))
+            #记录峰值，将该model相关数据写入文件，同时更新峰值
             if last_pre > max_pre and last_rec > max_rec:
                 print("save model")
                 max_pre = last_pre
@@ -342,10 +362,11 @@ def predict(model, test_data_loader):
                 pred_p.append(tmp_prob)
             else:
                 pred_p.append(tmp_NA_prob)
-
+            #当out中第i行的最大值不在第一个数且out中第i行的最大值大于 -1.0，pred_label为out中第i行最大值的下标，否则为0
             pred_y.append(pred_label)
 
     size = len(test_data_loader.dataset)
+    #断言函数assert  后面必须为真否则就触发异常，保证pred_y、true_y的大小与数据集大小相同
     assert len(pred_y) == size and len(true_y) == size
 
     model.train()
