@@ -13,4 +13,9 @@
 21.01.21
 --
 	main_mil.py标注到predict了  
+21.01.22
+--
+	main_mil.py进展到把了  precision，recall，fp_res算完的部分  
+	其中utils.py中的eval_metric标注完毕  
+	
 	
