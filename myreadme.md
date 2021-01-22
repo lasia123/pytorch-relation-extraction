@@ -16,6 +16,6 @@
 21.01.22
 --
 	main_mil.py进展到把了  precision，recall，fp_res算完的部分  
-	其中utils.py中的eval_metric标注完毕  
+		其中涉及到的utils.py中的eval_metric标注完毕  
 	
 	
