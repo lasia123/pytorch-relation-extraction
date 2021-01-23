@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+import sys
+sys.path.append('/usr/local/lib/python3.6/dist-packages')
+sys.path.append('/home/iiip/.local/lib/python3.6/site-packages')
+import fire
+
 
 from config import opt
 import models
