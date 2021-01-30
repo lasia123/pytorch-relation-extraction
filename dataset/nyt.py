@@ -74,7 +74,7 @@ class NYTLoad(object):
                 new_entPos:实体1和实体2在词表的下标的位置且每个值都加1，升序，[[1,35]]
                 new_masks:最后的句子的数组，据不变，数组后面用0填充了,即位置如[[1,2,2,2,2,2,2,2,2,....,0,0,0,0]]
          '''
-        #parse_sen: 最终全部的rels的数组，如[[0, -1, -1, -1], [0, -1, -1, -1],....]
+        #self.labels: 最终全部的rels的数组，如[[0, -1, -1, -1], [0, -1, -1, -1],....]
         #           rels label的总和不足4个则用-1补足，超过4个则只取前4个,如[0, -1, -1, -1]
         self.bags_feature, self.labels = self.parse_sen(self.train_path, 'train')
         np.save(os.path.join(self.root_path, 'train', 'bags_feature.npy'), self.bags_feature)
